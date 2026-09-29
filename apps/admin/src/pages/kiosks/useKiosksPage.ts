@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { KioskDto } from "@stella/shared";
+import type { KioskDto, KioskType } from "@stella/shared";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
 import type { DeployStatus } from "../../components/kiosk/DeployStatusPanel";
@@ -49,6 +49,8 @@ export function useKiosksPage() {
   const [hostname, setHostname] = useState("");
   const [name, setName] = useState("");
   const [exhibitId, setExhibitId] = useState("");
+  const [kioskType, setKioskType] = useState<KioskType>("exhibit");
+  const [wallTargetKioskId, setWallTargetKioskId] = useState("");
   const [installSoftware, setInstallSoftware] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [domainSuffix, setDomainSuffix] = useState("udhb.local");
@@ -375,13 +377,18 @@ export function useKiosksPage() {
         json: {
           hostname: host,
           name: name.trim() || undefined,
-          exhibitId: exhibitId || null,
+          kioskType,
+          exhibitId: kioskType === "exhibit" ? exhibitId || null : null,
+          wallTargetKioskId:
+            kioskType === "veteran_search" ? wallTargetKioskId || null : null,
           installSoftware,
         },
       });
       setHostname("");
       setName("");
       setExhibitId("");
+      setKioskType("exhibit");
+      setWallTargetKioskId("");
       setTestHint("");
       setShowAdd(false);
       await load();
@@ -406,6 +413,26 @@ export function useKiosksPage() {
       });
       patchKiosk(dto);
       setOkHint("Экспонат сохранён");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setBinding(null);
+    }
+  }
+
+  async function patchType(
+    id: string,
+    data: { kioskType: KioskType; wallTargetKioskId?: string | null }
+  ) {
+    setBinding(id);
+    setError("");
+    try {
+      const dto = await api<KioskDto>(`/api/kiosks/${id}`, {
+        method: "PATCH",
+        json: data,
+      });
+      patchKiosk(dto);
+      setOkHint("Тип киоска сохранён — примените kiosk.json на ПК");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -1024,6 +1051,11 @@ export function useKiosksPage() {
     setName,
     exhibitId,
     setExhibitId,
+    kioskType,
+    setKioskType,
+    wallTargetKioskId,
+    setWallTargetKioskId,
+    wallKiosks: kiosks.filter((k) => k.kioskType === "memory_wall"),
     installSoftware,
     setInstallSoftware,
     domainSuffix,
@@ -1064,6 +1096,7 @@ export function useKiosksPage() {
     opRunner,
     fleetJobs,
     bind,
+    patchType,
     probe,
     install,
     cancelInstall,

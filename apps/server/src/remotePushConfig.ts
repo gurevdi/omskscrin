@@ -35,7 +35,10 @@ export async function pushKioskConfig(id: string): Promise<{
 
   const kiosk = await prisma.kiosk.findUnique({
     where: { id },
-    include: { exhibit: { select: { title: true } } },
+    include: {
+      exhibit: { select: { title: true } },
+      wallTarget: { select: { hostname: true, name: true, healthPort: true, peerToken: true } },
+    },
   });
   if (!kiosk) return { ok: false, message: "Not found", kiosk: null };
 
@@ -46,8 +49,20 @@ export async function pushKioskConfig(id: string): Promise<{
 
   const site = await getSiteNetworkSettings();
   const settings = await ensureSiteSettings();
-  const json = JSON.stringify(buildKioskJsonConfig(kiosk, site, settings.gameShareUnc), null, 2);
-  const net = buildKioskJsonConfig(kiosk, site, settings.gameShareUnc);
+  const wallPeer =
+    kiosk.kioskType === "veteran_search" && kiosk.wallTarget && kiosk.peerToken
+      ? {
+          hostname: kiosk.wallTarget.hostname.toLowerCase(),
+          healthPort: kiosk.wallTarget.healthPort || 47821,
+          token: kiosk.peerToken,
+        }
+      : null;
+  const cfgInput = {
+    ...kiosk,
+    wallPeer,
+  };
+  const json = JSON.stringify(buildKioskJsonConfig(cfgInput, site, settings.gameShareUnc), null, 2);
+  const net = buildKioskJsonConfig(cfgInput, site, settings.gameShareUnc);
 
   running.add(id);
   try {

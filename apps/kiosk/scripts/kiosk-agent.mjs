@@ -1038,6 +1038,138 @@ function sendJson(res, code, obj) {
   res.end(body);
 }
 
+const WALL_TTL_DEFAULT = 900;
+const wallStatePath = path.join(root, "wall-state.json");
+
+function readWallPeerConfig() {
+  const cfg = loadJsonConfig();
+  const peer = cfg.wallPeer && typeof cfg.wallPeer === "object" ? cfg.wallPeer : null;
+  return {
+    kioskType: String(cfg.kioskType || "exhibit"),
+    peerToken: cfg.peerToken ? String(cfg.peerToken) : "",
+    wallShowTtlSec: Number(cfg.wallShowTtlSec) > 0 ? Number(cfg.wallShowTtlSec) : WALL_TTL_DEFAULT,
+    wallPeer: peer
+      ? {
+          hostname: String(peer.hostname || "").trim().toLowerCase(),
+          healthPort: Number(peer.healthPort) || 47821,
+          token: String(peer.token || ""),
+        }
+      : null,
+  };
+}
+
+function loadWallState() {
+  try {
+    if (!fs.existsSync(wallStatePath)) {
+      return { status: "idle", veteran: null, sourceHostname: null, shownAt: null, expiresAt: null, ttlSec: WALL_TTL_DEFAULT };
+    }
+    const raw = JSON.parse(fs.readFileSync(wallStatePath, "utf8"));
+    return normalizeWallState(raw);
+  } catch {
+    return { status: "idle", veteran: null, sourceHostname: null, shownAt: null, expiresAt: null, ttlSec: WALL_TTL_DEFAULT };
+  }
+}
+
+function normalizeWallState(raw) {
+  const ttlSec = Number(raw?.ttlSec) > 0 ? Number(raw.ttlSec) : WALL_TTL_DEFAULT;
+  const expiresAt = raw?.expiresAt ? String(raw.expiresAt) : null;
+  if (raw?.status === "showing" && expiresAt) {
+    const exp = Date.parse(expiresAt);
+    if (Number.isFinite(exp) && Date.now() >= exp) {
+      return { status: "idle", veteran: null, sourceHostname: null, shownAt: null, expiresAt: null, ttlSec };
+    }
+  }
+  return {
+    status: raw?.status === "showing" ? "showing" : "idle",
+    veteran: raw?.veteran && typeof raw.veteran === "object" ? raw.veteran : null,
+    sourceHostname: raw?.sourceHostname ? String(raw.sourceHostname) : null,
+    shownAt: raw?.shownAt ? String(raw.shownAt) : null,
+    expiresAt,
+    ttlSec,
+  };
+}
+
+function saveWallState(state) {
+  try {
+    fs.mkdirSync(path.dirname(wallStatePath), { recursive: true });
+    fs.writeFileSync(wallStatePath, JSON.stringify(state, null, 2), "utf8");
+  } catch (e) {
+    console.warn("[stella-agent] wall-state save failed:", e instanceof Error ? e.message : e);
+  }
+}
+
+function clearWallState(ttlSec = WALL_TTL_DEFAULT) {
+  const next = {
+    status: "idle",
+    veteran: null,
+    sourceHostname: null,
+    shownAt: null,
+    expiresAt: null,
+    ttlSec,
+  };
+  saveWallState(next);
+  return next;
+}
+
+function applyWallShow(body, ttlDefault) {
+  const veteran = body?.veteran && typeof body.veteran === "object" ? body.veteran : null;
+  const sourceUrl = veteran?.sourceUrl ? String(veteran.sourceUrl).trim() : "";
+  if (!sourceUrl) {
+    return { ok: false, error: "veteran.sourceUrl required" };
+  }
+  const ttlSec = Number(body?.ttlSec) > 0 ? Number(body.ttlSec) : ttlDefault;
+  const shownAt = body?.shownAt ? String(body.shownAt) : new Date().toISOString();
+  const shownMs = Date.parse(shownAt);
+  const base = Number.isFinite(shownMs) ? shownMs : Date.now();
+  const expiresAt = new Date(base + ttlSec * 1000).toISOString();
+  const state = {
+    status: "showing",
+    veteran: {
+      sourceUrl,
+      fullName: veteran.fullName != null ? String(veteran.fullName) : null,
+      birthYear: veteran.birthYear != null ? String(veteran.birthYear) : null,
+      deathYear: veteran.deathYear != null ? String(veteran.deathYear) : null,
+      rank: veteran.rank != null ? String(veteran.rank) : null,
+      summary: veteran.summary != null ? String(veteran.summary) : null,
+      photoUrl: veteran.photoUrl != null ? String(veteran.photoUrl) : null,
+    },
+    sourceHostname: body?.sourceHostname ? String(body.sourceHostname).toLowerCase() : hostname,
+    shownAt,
+    expiresAt,
+    ttlSec,
+  };
+  saveWallState(state);
+  return { ok: true, state };
+}
+
+function readRequestBody(req, limit = 1_000_000) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > limit) {
+        req.destroy();
+        reject(new Error("body too large"));
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function peerTokenFromReq(req) {
+  const h = req.headers["x-stella-peer-token"];
+  if (typeof h === "string" && h.trim()) return h.trim();
+  if (Array.isArray(h) && h[0]) return String(h[0]).trim();
+  return "";
+}
+
 function serveStatic(req, res) {
   const url = new URL(req.url || "/", `http://127.0.0.1:${uiPort}`);
   let rel = decodeURIComponent(url.pathname);
@@ -1095,7 +1227,7 @@ const healthServer = http.createServer(async (req, res) => {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, X-Stella-Peer-Token",
     });
     res.end();
     return;
@@ -1104,6 +1236,7 @@ const healthServer = http.createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/health") {
     // SPA polls this every ~3s while Edge UI is open — used instead of PowerShell process scans
     lastSpaContactAt = Date.now();
+    const wallCfg = readWallPeerConfig();
     sendJson(res, 200, {
       ok: true,
       hostname,
@@ -1118,8 +1251,152 @@ const healthServer = http.createServer(async (req, res) => {
       syncMessage: live.syncMessage,
       updatedAt: live.updatedAt,
       uiPort,
+      kioskType: wallCfg.kioskType,
+      wallState: wallCfg.kioskType === "memory_wall" ? loadWallState() : undefined,
       agent: "stella-kiosk-agent",
     });
+    return;
+  }
+
+  // —— Memory wall peer API (agent↔agent / local UI) ——
+  if (req.method === "GET" && url.pathname === "/peer/ping") {
+    const cfg = readWallPeerConfig();
+    sendJson(res, 200, {
+      ok: true,
+      hostname,
+      kioskId,
+      kioskType: cfg.kioskType,
+      hasWallPeer: Boolean(cfg.wallPeer?.hostname && cfg.wallPeer?.token),
+      peerTokenSet: Boolean(cfg.peerToken || cfg.wallPeer?.token),
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/peer/wall/state") {
+    sendJson(res, 200, loadWallState());
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/peer/wall/show") {
+    try {
+      const cfg = readWallPeerConfig();
+      const body = await readRequestBody(req);
+      const token = peerTokenFromReq(req) || String(body.token || "");
+      if (!cfg.peerToken || token !== cfg.peerToken) {
+        sendJson(res, 401, { ok: false, error: "invalid peer token" });
+        return;
+      }
+      if (cfg.kioskType !== "memory_wall") {
+        sendJson(res, 400, { ok: false, error: "this kiosk is not a memory wall" });
+        return;
+      }
+      const result = applyWallShow(body, cfg.wallShowTtlSec);
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      console.log(`[stella-agent] wall show from ${result.state.sourceHostname}: ${result.state.veteran?.sourceUrl}`);
+      sendJson(res, 200, { ok: true, state: result.state });
+    } catch (e) {
+      sendJson(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/peer/wall/clear") {
+    try {
+      const cfg = readWallPeerConfig();
+      const body = await readRequestBody(req).catch(() => ({}));
+      const token = peerTokenFromReq(req) || String(body?.token || "");
+      // Local UI may clear without token; remote peer must present token
+      const remote = Boolean(req.socket?.remoteAddress && !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress));
+      if (remote && (!cfg.peerToken || token !== cfg.peerToken)) {
+        sendJson(res, 401, { ok: false, error: "invalid peer token" });
+        return;
+      }
+      const state = clearWallState(cfg.wallShowTtlSec);
+      console.log("[stella-agent] wall cleared");
+      sendJson(res, 200, { ok: true, state });
+    } catch (e) {
+      sendJson(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+    return;
+  }
+
+  // Search kiosk UI → local agent → wall agent (LAN)
+  if (req.method === "POST" && url.pathname === "/peer/wall/send") {
+    try {
+      const cfg = readWallPeerConfig();
+      if (!cfg.wallPeer?.hostname || !cfg.wallPeer?.token) {
+        sendJson(res, 400, { ok: false, error: "wallPeer not configured in kiosk.json" });
+        return;
+      }
+      const body = await readRequestBody(req);
+      const ttlSec = Number(body.ttlSec) > 0 ? Number(body.ttlSec) : cfg.wallShowTtlSec;
+      const payload = {
+        sourceHostname: hostname,
+        shownAt: new Date().toISOString(),
+        ttlSec,
+        veteran: body.veteran || body,
+      };
+      const target = `http://${cfg.wallPeer.hostname}:${cfg.wallPeer.healthPort}/peer/wall/show`;
+      const r = await fetch(target, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Stella-Peer-Token": cfg.wallPeer.token,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(12_000),
+      });
+      const text = await r.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { raw: text };
+      }
+      if (!r.ok) {
+        sendJson(res, r.status >= 400 ? r.status : 502, {
+          ok: false,
+          error: data?.error || `wall agent HTTP ${r.status}`,
+          wall: data,
+        });
+        return;
+      }
+      console.log(`[stella-agent] wall send ok → ${cfg.wallPeer.hostname}`);
+      sendJson(res, 200, { ok: true, wall: data });
+    } catch (e) {
+      sendJson(res, 502, {
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/peer/wall/send-clear") {
+    try {
+      const cfg = readWallPeerConfig();
+      if (!cfg.wallPeer?.hostname || !cfg.wallPeer?.token) {
+        sendJson(res, 400, { ok: false, error: "wallPeer not configured in kiosk.json" });
+        return;
+      }
+      const target = `http://${cfg.wallPeer.hostname}:${cfg.wallPeer.healthPort}/peer/wall/clear`;
+      const r = await fetch(target, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Stella-Peer-Token": cfg.wallPeer.token,
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = await r.json().catch(() => ({}));
+      sendJson(res, r.ok ? 200 : 502, { ok: r.ok, wall: data });
+    } catch (e) {
+      sendJson(res, 502, { ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
     return;
   }
 

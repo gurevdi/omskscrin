@@ -64,12 +64,23 @@ export function buildKioskJsonConfig(
     uiPort: number;
     serverUrl?: string | null;
     appVersion?: string | null;
+    kioskType?: string | null;
+    peerToken?: string | null;
+    wallPeer?: {
+      hostname: string;
+      healthPort: number;
+      token: string;
+    } | null;
   },
   site: SiteNetworkSettings,
   gameShareUnc?: string | null
 ) {
   const net = resolveKioskNetwork(kiosk, site);
   const unc = String(gameShareUnc || "").trim();
+  const kioskType =
+    kiosk.kioskType === "veteran_search" || kiosk.kioskType === "memory_wall"
+      ? kiosk.kioskType
+      : "exhibit";
   return {
     hostname: kiosk.hostname.toLowerCase(),
     kioskId: kiosk.kioskId.toLowerCase(),
@@ -82,7 +93,14 @@ export function buildKioskJsonConfig(
     healthPort: net.healthPort,
     uiPort: net.uiPort,
     appVersion: kiosk.appVersion?.trim() || "0.1.0",
-    ...(unc ? { gameShareUnc: unc.replace(/\/$/, "") } : {}),
+    kioskType,
+    ...(kioskType === "memory_wall" && kiosk.peerToken
+      ? { peerToken: kiosk.peerToken, wallShowTtlSec: 900 }
+      : {}),
+    ...(kioskType === "veteran_search" && kiosk.wallPeer
+      ? { wallPeer: kiosk.wallPeer, wallShowTtlSec: 900 }
+      : {}),
+    ...(unc && kioskType === "exhibit" ? { gameShareUnc: unc.replace(/\/$/, "") } : {}),
   };
 }
 

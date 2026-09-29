@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { KioskDto } from "@stella/shared";
-import { PROBE_STATUS_LABEL } from "@stella/shared";
+import { KIOSK_TYPE_LABEL, PROBE_STATUS_LABEL } from "@stella/shared";
 import {
   otaListTagClass,
   otaListTagText,
@@ -124,6 +124,9 @@ export function KioskList(props: Props) {
                   <span className={`kx-item__tag ${k.online ? "is-live" : ""}`}>
                     {k.online ? "онлайн" : "офлайн"}
                   </span>
+                  {k.kioskType && k.kioskType !== "exhibit" ? (
+                    <span className="kx-item__tag is-type">{KIOSK_TYPE_LABEL[k.kioskType]}</span>
+                  ) : null}
                   <span
                     className={`kx-item__tag ${otaListTagClass(otaState)}`}
                     title={

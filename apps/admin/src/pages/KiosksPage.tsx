@@ -157,6 +157,11 @@ export function KiosksPage() {
                   onHostname={p.setHostname}
                   name={p.name}
                   onName={p.setName}
+                  kioskType={p.kioskType}
+                  onKioskType={p.setKioskType}
+                  wallTargetKioskId={p.wallTargetKioskId}
+                  onWallTargetKioskId={p.setWallTargetKioskId}
+                  wallKiosks={p.wallKiosks}
                   exhibitId={p.exhibitId}
                   onExhibitId={p.setExhibitId}
                   exhibits={p.exhibits}
@@ -179,6 +184,7 @@ export function KiosksPage() {
             <KioskDetail
               kiosk={p.selected}
               exhibits={p.exhibits}
+              wallKiosks={p.wallKiosks}
               canEdit={p.canEdit}
               deployReady={!!p.deploy?.packageReady}
               probing={p.probing === p.selected.id}
@@ -198,6 +204,7 @@ export function KiosksPage() {
               targetSoftwareVersion={p.selected.otaTarget || p.deploy?.softwareVersion || null}
               hiddenByFilter={p.selectedHiddenByFilter}
               onBind={p.bind}
+              onPatchType={p.patchType}
               onProbe={p.probe}
               onInstall={p.install}
               onCancel={p.cancelInstall}

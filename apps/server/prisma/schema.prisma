@@ -35,6 +35,13 @@ enum InstallStatus {
   error
 }
 
+/// exhibit = техника; veteran_search = поиск; memory_wall = Стена памяти
+enum KioskType {
+  exhibit
+  veteran_search
+  memory_wall
+}
+
 model User {
   id           String   @id @default(cuid())
   login        String   @unique
@@ -181,6 +188,11 @@ model Kiosk {
   /// Override site server URL (null = inherit)
   serverUrl      String?
   exhibitId      String?
+  kioskType      KioskType   @default(exhibit)
+  /// For veteran_search: paired memory_wall kiosk
+  wallTargetKioskId String?
+  /// Shared secret for agent↔agent wall show (written into kiosk.json)
+  peerToken      String?
   lastSeenAt     DateTime?
   contentVersion String?
   syncStatus     SyncStatus  @default(unknown)
@@ -198,5 +210,7 @@ model Kiosk {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  exhibit Exhibit? @relation(fields: [exhibitId], references: [id])
+  exhibit    Exhibit? @relation(fields: [exhibitId], references: [id])
+  wallTarget Kiosk?   @relation("WallPair", fields: [wallTargetKioskId], references: [id], onDelete: SetNull)
+  wallSources Kiosk[] @relation("WallPair")
 }

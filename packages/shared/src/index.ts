@@ -21,6 +21,51 @@ export type ProbeStatus =
 
 export type InstallStatus = "idle" | "queued" | "running" | "ok" | "error";
 
+/** Kiosk product mode — exhibit tech, veteran search, or memory wall display */
+export type KioskType = "exhibit" | "veteran_search" | "memory_wall";
+
+export const KIOSK_TYPE_LABEL: Record<KioskType, string> = {
+  exhibit: "Экспонат",
+  veteran_search: "Поиск ветерана",
+  memory_wall: "Стена памяти",
+};
+
+export const WALL_SHOW_TTL_SEC = 15 * 60;
+
+/** Peer payload: search agent → wall agent */
+export interface WallVeteranPayload {
+  sourceUrl: string;
+  fullName?: string | null;
+  birthYear?: string | null;
+  deathYear?: string | null;
+  rank?: string | null;
+  summary?: string | null;
+  photoUrl?: string | null;
+}
+
+export interface WallShowRequest {
+  sourceHostname: string;
+  shownAt: string;
+  ttlSec: number;
+  veteran: WallVeteranPayload;
+}
+
+export interface WallStateDto {
+  status: "idle" | "showing";
+  veteran: WallVeteranPayload | null;
+  sourceHostname: string | null;
+  shownAt: string | null;
+  expiresAt: string | null;
+  ttlSec: number;
+}
+
+/** wallPeer block inside kiosk.json on search / wall machines */
+export interface KioskWallPeerConfig {
+  hostname: string;
+  healthPort: number;
+  token: string;
+}
+
 export type InstallStage =
   | "idle"
   | "queued"
@@ -362,6 +407,12 @@ export interface KioskDto {
   serverUrl: string | null;
   exhibitId: string | null;
   exhibitTitle?: string | null;
+  kioskType: KioskType;
+  wallTargetKioskId: string | null;
+  wallTargetHostname?: string | null;
+  wallTargetName?: string | null;
+  /** True when peerToken is set (token itself never sent to browser) */
+  peerTokenSet: boolean;
   lastSeenAt: string | null;
   online: boolean;
   contentVersion: string | null;

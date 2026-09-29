@@ -1,0 +1,233 @@
+.mw-boot {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  background: #0b121c;
+  color: #c8d0da;
+}
+
+.mw-search {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  background: #0f1620;
+  color: #e8edf3;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.mw-search__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: #121c2a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mw-search__brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.mw-search__brand strong {
+  font-size: 1.15rem;
+}
+
+.mw-search__brand span {
+  font-size: 0.78rem;
+  color: rgba(232, 237, 243, 0.55);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mw-search__peer {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mw-search__frame-wrap {
+  min-height: 0;
+  background: #fff;
+}
+
+.mw-search__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.mw-search__dock {
+  padding: 0.85rem 1.25rem 1.1rem;
+  background: #121c2a;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.mw-search__hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(232, 237, 243, 0.7);
+  line-height: 1.4;
+}
+
+.mw-search__fields {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 0.75rem;
+}
+
+.mw-search__fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(232, 237, 243, 0.55);
+}
+
+.mw-search__fields input {
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #0f1620;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+
+.mw-search__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.mw-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.7rem 1.25rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(180deg, #a83a47 0%, #8f2f3a 100%);
+}
+
+.mw-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mw-btn--ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e8edf3;
+}
+
+.mw-search__ok {
+  margin: 0;
+  color: #7ddea8;
+  font-weight: 600;
+}
+
+.mw-search__err {
+  margin: 0;
+  color: #f0a0a0;
+  font-weight: 600;
+}
+
+.mw-wall {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.mw-wall--idle {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(168, 58, 71, 0.28), transparent 55%),
+    linear-gradient(165deg, #121c2a 0%, #0b121c 70%);
+  color: #eef3f7;
+  text-align: center;
+  padding: 2rem;
+}
+
+.mw-wall__idle-inner h1 {
+  margin: 0.35rem 0 0.75rem;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.mw-wall__eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(238, 243, 247, 0.55);
+}
+
+.mw-wall__idle-inner p:last-child {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 1.15rem;
+  color: rgba(238, 243, 247, 0.72);
+  line-height: 1.45;
+}
+
+.mw-wall--showing {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #000;
+}
+
+.mw-wall__chrome {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.55rem 1rem;
+  background: rgba(8, 12, 18, 0.92);
+  color: #e8edf3;
+  font-size: 0.95rem;
+}
+
+.mw-wall__chrome strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mw-wall__ttl {
+  opacity: 0.65;
+  font-size: 0.85rem;
+}
+
+.mw-wall__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .mw-search__fields {
+    grid-template-columns: 1fr;
+  }
+}

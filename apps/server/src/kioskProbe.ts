@@ -1,5 +1,6 @@
 import dns from "node:dns/promises";
 import { exhibitGameFromRow } from "@stella/shared";
+import type { GameCopyDto, KioskType } from "@stella/shared";
 import { prisma } from "./prisma.js";
 import { config } from "./config.js";
 import { getDeployMeta } from "./deployMeta.js";
@@ -8,7 +9,6 @@ import { getProbeIntervalMs, getProbeTimeoutMs } from "./networkSettings.js";
 import { getSoftwareUpdatePending } from "./softwareUpdatePending.js";
 import { setGameCopyState, setInstalledGames } from "./gameCopyState.js";
 import { enrichKioskDto } from "./kioskDtoEnrich.js";
-import type { GameCopyDto } from "@stella/shared";
 import type { InstallStatus, ProbeStatus, SyncStatus } from "@prisma/client";
 
 function isOnline(lastSeenAt: Date | null) {
@@ -25,6 +25,9 @@ export function mapKiosk(k: {
   uiPort?: number;
   serverUrl?: string | null;
   exhibitId: string | null;
+  kioskType?: string | null;
+  wallTargetKioskId?: string | null;
+  peerToken?: string | null;
   lastSeenAt: Date | null;
   contentVersion: string | null;
   syncStatus: SyncStatus;
@@ -44,6 +47,7 @@ export function mapKiosk(k: {
     gameShareFolder?: string | null;
     gameExe?: string | null;
   } | null;
+  wallTarget?: { hostname: string; name: string } | null;
 }, ota?: { target: string | null }) {
   const metaTarget =
     ota?.target !== undefined
@@ -59,6 +63,8 @@ export function mapKiosk(k: {
     pending && metaTarget && pending.target === metaTarget && local !== metaTarget
   );
   const exhibitGame = k.exhibit ? exhibitGameFromRow(k.exhibit) : null;
+  const kioskType: KioskType =
+    k.kioskType === "veteran_search" || k.kioskType === "memory_wall" ? k.kioskType : "exhibit";
   return {
     id: k.id,
     kioskId: k.kioskId,
@@ -70,6 +76,11 @@ export function mapKiosk(k: {
     exhibitId: k.exhibitId,
     exhibitTitle: k.exhibit?.title ?? null,
     exhibitGame,
+    kioskType,
+    wallTargetKioskId: k.wallTargetKioskId ?? null,
+    wallTargetHostname: k.wallTarget?.hostname ?? null,
+    wallTargetName: k.wallTarget?.name ?? null,
+    peerTokenSet: Boolean(k.peerToken),
     lastSeenAt: k.lastSeenAt?.toISOString() ?? null,
     online: isOnline(k.lastSeenAt),
     contentVersion: k.contentVersion,
@@ -116,7 +127,10 @@ export const kioskExhibitSelect = {
 
 export async function loadKioskSnapshot() {
   const list = await prisma.kiosk.findMany({
-    include: { exhibit: { select: kioskExhibitSelect } },
+    include: {
+      exhibit: { select: kioskExhibitSelect },
+      wallTarget: { select: { hostname: true, name: true } },
+    },
     orderBy: { name: "asc" },
   });
   const sw = getDeployMeta().softwareVersion;

@@ -1,3 +1,5 @@
+import type { KioskType, KioskWallPeerConfig } from "@stella/shared";
+
 export type KioskGame = {
   /** Button label */
   title: string;
@@ -19,6 +21,10 @@ export type KioskConfig = {
   appVersion: string;
   /** Optional local game launched via Tauri shell */
   game?: KioskGame | null;
+  kioskType?: KioskType;
+  wallPeer?: KioskWallPeerConfig | null;
+  peerToken?: string;
+  wallShowTtlSec?: number;
 };
 
 const defaults: KioskConfig = {
@@ -31,6 +37,7 @@ const defaults: KioskConfig = {
   healthPort: 47821,
   appVersion: "0.1.0",
   game: null,
+  kioskType: "exhibit",
 };
 
 export async function loadConfig(): Promise<KioskConfig> {
@@ -49,7 +56,28 @@ export async function loadConfig(): Promise<KioskConfig> {
             cwd: raw.game.cwd ? String(raw.game.cwd) : undefined,
           }
         : null;
-    return { ...defaults, ...raw, hostname, kioskId, game };
+    const kioskType =
+      raw.kioskType === "veteran_search" || raw.kioskType === "memory_wall"
+        ? raw.kioskType
+        : "exhibit";
+    const wallPeer =
+      raw.wallPeer && raw.wallPeer.hostname && raw.wallPeer.token
+        ? {
+            hostname: String(raw.wallPeer.hostname).toLowerCase(),
+            healthPort: Number(raw.wallPeer.healthPort) || 47821,
+            token: String(raw.wallPeer.token),
+          }
+        : null;
+    return {
+      ...defaults,
+      ...raw,
+      hostname,
+      kioskId,
+      game,
+      kioskType,
+      wallPeer,
+      wallShowTtlSec: Number(raw.wallShowTtlSec) > 0 ? Number(raw.wallShowTtlSec) : 900,
+    };
   } catch {
     return defaults;
   }

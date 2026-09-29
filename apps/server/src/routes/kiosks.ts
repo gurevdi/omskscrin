@@ -26,6 +26,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import { cancelKioskInstall, clearInstallCancelRequest, deployPackageReady, startKioskInstall } from "../remoteInstall.js";
 import { enrichKioskDto } from "../kioskDtoEnrich.js";
+import { resolveKioskTypeFields } from "../kioskType.js";
 import { setGameCopyState, setInstalledGames } from "../gameCopyState.js";
 import { requestClearKioskPolicies } from "../remoteClearPolicies.js";
 import { requestStartKioskRuntime } from "../remoteStart.js";
@@ -80,6 +81,8 @@ const kioskSchema = z.object({
   uiPort: z.number().int().min(1).max(65535).optional(),
   serverUrl: z.union([z.string().url(), z.literal("")]).nullable().optional(),
   exhibitId: z.string().nullable().optional(),
+  kioskType: z.enum(["exhibit", "veteran_search", "memory_wall"]).optional(),
+  wallTargetKioskId: z.string().nullable().optional(),
   installSoftware: z.boolean().optional(),
 });
 
@@ -297,6 +300,13 @@ export async function registerKioskRoutes(app: FastifyInstance) {
     const hostname = resolveKioskHostname(body.hostname);
     if (!hostname) return reply.code(400).send({ error: "hostname required" });
 
+    const typeResolved = await resolveKioskTypeFields({
+      kioskType: body.kioskType ?? "exhibit",
+      wallTargetKioskId: body.wallTargetKioskId,
+      exhibitId: body.exhibitId ?? null,
+    });
+    if (!typeResolved.ok) return reply.code(400).send({ error: typeResolved.error });
+
     try {
       const k = await prisma.kiosk.create({
         data: {
@@ -306,12 +316,18 @@ export async function registerKioskRoutes(app: FastifyInstance) {
           healthPort: body.healthPort ?? 47821,
           uiPort: body.uiPort ?? 47820,
           serverUrl: body.serverUrl ?? null,
-          exhibitId: body.exhibitId ?? null,
+          exhibitId: typeResolved.data.exhibitId !== undefined ? typeResolved.data.exhibitId : body.exhibitId ?? null,
+          kioskType: typeResolved.data.kioskType,
+          wallTargetKioskId: typeResolved.data.wallTargetKioskId,
+          peerToken: typeResolved.data.peerToken,
           installStatus: body.installSoftware ? "queued" : "idle",
           installStage: body.installSoftware ? "queued" : "idle",
           installMessage: body.installSoftware ? "В очереди" : null,
         },
-        include: { exhibit: { select: { title: true } } },
+        include: {
+          exhibit: { select: { title: true } },
+          wallTarget: { select: { hostname: true, name: true } },
+        },
       });
       const dto = enrichKioskDto(mapKiosk(k));
       broadcastKioskUpsert(dto);
@@ -331,6 +347,9 @@ export async function registerKioskRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = kioskSchema.partial().parse(request.body);
+      const existing = await prisma.kiosk.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ error: "Not found" });
+
       const data: {
         hostname?: string;
         kioskId?: string;
@@ -339,6 +358,9 @@ export async function registerKioskRoutes(app: FastifyInstance) {
         uiPort?: number;
         serverUrl?: string | null;
         exhibitId?: string | null;
+        kioskType?: "exhibit" | "veteran_search" | "memory_wall";
+        wallTargetKioskId?: string | null;
+        peerToken?: string | null;
       } = {};
       if (body.hostname) {
         await refreshDeployCredentialsFromDb();
@@ -353,13 +375,40 @@ export async function registerKioskRoutes(app: FastifyInstance) {
         const v = body.serverUrl?.trim().replace(/\/$/, "");
         data.serverUrl = v || null;
       }
-      if (body.exhibitId !== undefined) data.exhibitId = body.exhibitId;
+
+      const typeTouched =
+        body.kioskType !== undefined ||
+        body.wallTargetKioskId !== undefined ||
+        body.exhibitId !== undefined;
+      if (typeTouched) {
+        const typeResolved = await resolveKioskTypeFields({
+          id,
+          kioskType: body.kioskType ?? existing.kioskType,
+          wallTargetKioskId:
+            body.wallTargetKioskId !== undefined
+              ? body.wallTargetKioskId
+              : existing.wallTargetKioskId,
+          exhibitId: body.exhibitId !== undefined ? body.exhibitId : existing.exhibitId,
+        });
+        if (!typeResolved.ok) return reply.code(400).send({ error: typeResolved.error });
+        data.kioskType = typeResolved.data.kioskType;
+        data.wallTargetKioskId = typeResolved.data.wallTargetKioskId;
+        data.peerToken = typeResolved.data.peerToken;
+        if (typeResolved.data.exhibitId !== undefined) {
+          data.exhibitId = typeResolved.data.exhibitId;
+        } else if (body.exhibitId !== undefined && typeResolved.data.kioskType === "exhibit") {
+          data.exhibitId = body.exhibitId;
+        }
+      }
 
       try {
         const k = await prisma.kiosk.update({
           where: { id },
           data,
-          include: { exhibit: { select: { title: true } } },
+          include: {
+            exhibit: { select: { title: true } },
+            wallTarget: { select: { hostname: true, name: true } },
+          },
         });
         const dto = enrichKioskDto(mapKiosk(k));
         broadcastKioskUpsert(dto);

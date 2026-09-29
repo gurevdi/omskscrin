@@ -1,7 +1,11 @@
 import { FormEvent } from "react";
+import type { KioskType } from "@stella/shared";
+import { KIOSK_TYPE_LABEL } from "@stella/shared";
 import { Alert } from "../../components/ui/Alert";
 import { Card } from "../../components/ui/Card";
 import type { ExhibitOpt } from "./kioskHelpers";
+
+type WallOpt = { id: string; name: string; hostname: string };
 
 type Props = {
   open: boolean;
@@ -10,6 +14,11 @@ type Props = {
   onHostname: (v: string) => void;
   name: string;
   onName: (v: string) => void;
+  kioskType: KioskType;
+  onKioskType: (v: KioskType) => void;
+  wallTargetKioskId: string;
+  onWallTargetKioskId: (v: string) => void;
+  wallKiosks: WallOpt[];
   exhibitId: string;
   onExhibitId: (v: string) => void;
   exhibits: ExhibitOpt[];
@@ -64,16 +73,47 @@ export function KioskAddForm(props: Props) {
               />
             </label>
             <label>
-              Экспонат
-              <select value={props.exhibitId} onChange={(e) => props.onExhibitId(e.target.value)}>
-                <option value="">— не привязан —</option>
-                {props.exhibits.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.title}
+              Тип киоска
+              <select
+                value={props.kioskType}
+                onChange={(e) => props.onKioskType(e.target.value as KioskType)}
+              >
+                {(Object.keys(KIOSK_TYPE_LABEL) as KioskType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {KIOSK_TYPE_LABEL[t]}
                   </option>
                 ))}
               </select>
             </label>
+            {props.kioskType === "exhibit" ? (
+              <label>
+                Экспонат
+                <select value={props.exhibitId} onChange={(e) => props.onExhibitId(e.target.value)}>
+                  <option value="">— не привязан —</option>
+                  {props.exhibits.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {props.kioskType === "veteran_search" ? (
+              <label>
+                Целевая стена памяти
+                <select
+                  value={props.wallTargetKioskId}
+                  onChange={(e) => props.onWallTargetKioskId(e.target.value)}
+                >
+                  <option value="">— не выбрана —</option>
+                  {props.wallKiosks.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} ({w.hostname})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="checkbox-label">
               <input
                 type="checkbox"
@@ -94,9 +134,7 @@ export function KioskAddForm(props: Props) {
               </button>
               <button
                 className="btn"
-                disabled={
-                  props.creating || (props.installSoftware && !props.packageReady)
-                }
+                disabled={props.creating || (props.installSoftware && !props.packageReady)}
               >
                 {props.creating ? "Добавление…" : "Добавить"}
               </button>

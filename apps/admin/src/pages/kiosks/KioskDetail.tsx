@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import type { KioskDto } from "@stella/shared";
-import { INSTALL_STATUS_LABEL, PROBE_STATUS_LABEL, GAME_COPY_STATUS_LABEL } from "@stella/shared";
+import type { KioskDto, KioskType } from "@stella/shared";
+import {
+  INSTALL_STATUS_LABEL,
+  PROBE_STATUS_LABEL,
+  GAME_COPY_STATUS_LABEL,
+  KIOSK_TYPE_LABEL,
+} from "@stella/shared";
 import { KioskLifecyclePanel } from "../../components/kiosk/KioskLifecyclePanel";
 import { resolveOtaState } from "../../components/kiosk/KioskOtaStatus";
 import { probeBadgeClass } from "../../components/kiosk/status";
@@ -10,6 +15,7 @@ import type { ExhibitOpt } from "./kioskHelpers";
 export type KioskDetailProps = {
   kiosk: KioskDto;
   exhibits: ExhibitOpt[];
+  wallKiosks: KioskDto[];
   canEdit: boolean;
   deployReady: boolean;
   probing: boolean;
@@ -29,6 +35,10 @@ export type KioskDetailProps = {
   targetSoftwareVersion: string | null;
   hiddenByFilter?: boolean;
   onBind: (id: string, exhibitId: string) => void;
+  onPatchType: (
+    id: string,
+    data: { kioskType: KioskType; wallTargetKioskId?: string | null }
+  ) => void;
   onProbe: (id: string) => void;
   onInstall: (id: string) => void;
   onCancel: (id: string) => void;
@@ -218,6 +228,69 @@ export function KioskDetail(props: KioskDetailProps) {
         {props.canEdit ? (
           <>
             <section className="kx-section">
+              <h3 className="kx-section__head">Тип киоска</h3>
+              <div className="kx-section__body">
+                <label className="kx-field kx-field--grow">
+                  Режим
+                  <select
+                    value={k.kioskType || "exhibit"}
+                    disabled={locked}
+                    onChange={(e) =>
+                      props.onPatchType(k.id, {
+                        kioskType: e.target.value as KioskType,
+                        wallTargetKioskId:
+                          e.target.value === "veteran_search" ? k.wallTargetKioskId : null,
+                      })
+                    }
+                  >
+                    {(Object.keys(KIOSK_TYPE_LABEL) as KioskType[]).map((t) => (
+                      <option key={t} value={t}>
+                        {KIOSK_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {k.kioskType === "veteran_search" ? (
+                  <label className="kx-field kx-field--grow">
+                    Целевая стена памяти
+                    <select
+                      value={k.wallTargetKioskId || ""}
+                      disabled={locked}
+                      onChange={(e) =>
+                        props.onPatchType(k.id, {
+                          kioskType: "veteran_search",
+                          wallTargetKioskId: e.target.value || null,
+                        })
+                      }
+                    >
+                      <option value="">— не выбрана —</option>
+                      {props.wallKiosks
+                        .filter((w) => w.id !== k.id)
+                        .map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} ({w.hostname})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ) : null}
+                {k.kioskType === "memory_wall" ? (
+                  <p className="cx-setting__hint" style={{ margin: 0 }}>
+                    Peer-токен: {k.peerTokenSet ? "задан" : "будет создан"}. После смены типа
+                    нажмите «Применить kiosk.json на ПК».
+                  </p>
+                ) : null}
+                {k.kioskType === "veteran_search" && k.wallTargetHostname ? (
+                  <p className="cx-setting__hint" style={{ margin: 0 }}>
+                    Пара: → {k.wallTargetName || k.wallTargetHostname}. Примените kiosk.json на
+                    поиске и на стене.
+                  </p>
+                ) : null}
+              </div>
+            </section>
+
+            {k.kioskType === "exhibit" || !k.kioskType ? (
+            <section className="kx-section">
               <h3 className="kx-section__head">Экспонат</h3>
               <div className="kx-section__body">
                 <label className="kx-field kx-field--grow">
@@ -237,6 +310,7 @@ export function KioskDetail(props: KioskDetailProps) {
                 </label>
               </div>
             </section>
+            ) : null}
 
             <section className="kx-section">
               <h3 className="kx-section__head">Сеть и kiosk.json</h3>
