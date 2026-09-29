@@ -104,6 +104,7 @@ export function KioskDetail(props: KioskDetailProps) {
           <h2 className="kx-head__title">{k.name}</h2>
           <p className="kx-head__sub">{k.hostname}</p>
           <div className="kx-head__badges">
+            <span className="badge">{KIOSK_TYPE_LABEL[(k.kioskType || "exhibit") as KioskType]}</span>
             <span className={`badge ${probeBadgeClass(k.probeStatus)}`}>
               {PROBE_STATUS_LABEL[k.probeStatus]}
             </span>

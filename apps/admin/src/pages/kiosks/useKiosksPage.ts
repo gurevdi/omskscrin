@@ -393,8 +393,19 @@ export function useKiosksPage() {
       setShowAdd(false);
       await load();
       selectKiosk(created.id);
+      const typeLabel =
+        created.kioskType === "veteran_search"
+          ? "Поиск ветерана"
+          : created.kioskType === "memory_wall"
+            ? "Стена памяти"
+            : "Экспонат";
       setOkHint(
-        `Киоск ${created.hostname} добавлен${installSoftware ? " · установка по WinRM…" : ""}`
+        `Киоск ${created.hostname} добавлен · тип: ${typeLabel}` +
+          (installSoftware
+            ? " · установка по WinRM…"
+            : created.kioskType !== "exhibit"
+              ? " · нажмите «Применить kiosk.json на ПК»"
+              : "")
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");

@@ -10,6 +10,8 @@ import { mapKiosk, probeKioskById } from "./kioskProbe.js";
 import { enrichKioskDto } from "./kioskDtoEnrich.js";
 import { broadcastKioskUpsert } from "./monitorHub.js";
 import { getSiteNetworkSettings, resolveKioskNetwork } from "./networkSettings.js";
+import { buildFullKioskJsonConfig } from "./kioskJsonConfig.js";
+import { pushKioskConfig } from "./remotePushConfig.js";
 import {
   deployTransportError,
   isLocalKiosk,
@@ -182,6 +184,8 @@ export async function startKioskInstall(id: string) {
 
   const site = await getSiteNetworkSettings();
   const net = resolveKioskNetwork(kiosk, site);
+  const fullCfg = await buildFullKioskJsonConfig(id);
+  const configJson = fullCfg ? JSON.stringify(fullCfg) : "";
 
   const args = [
     "-Hostname",
@@ -199,6 +203,9 @@ export async function startKioskInstall(id: string) {
     "-AppVersion",
     "0.1.0",
   ];
+  if (configJson) {
+    args.push("-ConfigJson", configJson);
+  }
   if (isLocal) {
     args.push("-LocalOnly");
   } else if (deploy.user && deploy.password) {
@@ -244,6 +251,12 @@ export async function startKioskInstall(id: string) {
     const text = `${result.stdout}\n${result.stderr}`.trim();
     if (/INSTALL_OK/i.test(text) || /OK installed/i.test(text)) {
       const dto = await setInstall(id, "ok", "done", INSTALL_STAGE_LABEL.done);
+      try {
+        // Ensure kioskType / wallPeer land in kiosk.json (SSH path may skip ConfigJson)
+        await pushKioskConfig(id);
+      } catch {
+        /* install ok even if push fails — admin can «Применить kiosk.json» */
+      }
       try {
         await probeKioskById(id);
       } catch {

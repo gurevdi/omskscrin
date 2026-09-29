@@ -2,8 +2,7 @@ import { prisma } from "./prisma.js";
 import { getEffectiveDeploy } from "./deployCredentials.js";
 import { mapKiosk, probeKioskById } from "./kioskProbe.js";
 import { enrichKioskDto } from "./kioskDtoEnrich.js";
-import { buildKioskJsonConfig, getSiteNetworkSettings } from "./networkSettings.js";
-import { ensureSiteSettings } from "./siteSettings.js";
+import { buildFullKioskJsonConfig } from "./kioskJsonConfig.js";
 import {
   deployCredentialsOk,
   deployTransportError,
@@ -47,22 +46,9 @@ export async function pushKioskConfig(id: string): Promise<{
     return { ok: false, message: "Задайте DEPLOY_USER / DEPLOY_PASSWORD в .env", kiosk: mapKiosk(kiosk) };
   }
 
-  const site = await getSiteNetworkSettings();
-  const settings = await ensureSiteSettings();
-  const wallPeer =
-    kiosk.kioskType === "veteran_search" && kiosk.wallTarget && kiosk.peerToken
-      ? {
-          hostname: kiosk.wallTarget.hostname.toLowerCase(),
-          healthPort: kiosk.wallTarget.healthPort || 47821,
-          token: kiosk.peerToken,
-        }
-      : null;
-  const cfgInput = {
-    ...kiosk,
-    wallPeer,
-  };
-  const json = JSON.stringify(buildKioskJsonConfig(cfgInput, site, settings.gameShareUnc), null, 2);
-  const net = buildKioskJsonConfig(cfgInput, site, settings.gameShareUnc);
+  const netCfg = await buildFullKioskJsonConfig(id);
+  if (!netCfg) return { ok: false, message: "Not found", kiosk: null };
+  const json = JSON.stringify(netCfg, null, 2);
 
   running.add(id);
   try {
@@ -72,13 +58,13 @@ export async function pushKioskConfig(id: string): Promise<{
       "-ConfigJson",
       json,
       "-HealthPort",
-      String(net.healthPort),
+      String(netCfg.healthPort),
     ];
     if (isLocal) args.push("-LocalOnly");
-  else {
-    const deploy = getEffectiveDeploy();
-    args.push("-DeployUser", deploy.user, "-DeployPassword", deploy.password);
-  }
+    else {
+      const deploy = getEffectiveDeploy();
+      args.push("-DeployUser", deploy.user, "-DeployPassword", deploy.password);
+    }
 
     const result = await runDeployScript("remote-push-config", args, { timeoutMs: 120_000 });
     const text = `${result.stdout}\n${result.stderr}`.trim();

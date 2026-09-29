@@ -9,6 +9,7 @@ param(
   [string]$AppVersion = "0.1.0",
   [string]$DeployUser = "",
   [string]$DeployPassword = "",
+  [string]$ConfigJson = "",
   [switch]$LocalOnly
 )
 
@@ -62,6 +63,11 @@ function New-PackageZip {
 
 function Write-KioskConfig([string]$TargetRoot) {
   Write-Stage "configuring"
+  if ($ConfigJson -and $ConfigJson.Trim().Length -gt 2) {
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText((Join-Path $TargetRoot "kiosk.json"), $ConfigJson.Trim(), $utf8)
+    return
+  }
   $cfgObj = [ordered]@{
     hostname             = $Hostname.ToLower()
     kioskId              = $KioskId.ToLower()
@@ -72,6 +78,7 @@ function Write-KioskConfig([string]$TargetRoot) {
     healthPort           = $HealthPort
     uiPort               = $UiPort
     appVersion           = $AppVersion
+    kioskType            = "exhibit"
   }
   # UTF8 without BOM — Node JSON.parse rejects EF BB BF
   $utf8 = New-Object System.Text.UTF8Encoding $false
@@ -317,18 +324,23 @@ try {
   } -ArgumentList $remoteRoot
 
   Write-Stage "configuring"
-  $cfgObj = [ordered]@{
-    hostname             = $Hostname.ToLower()
-    kioskId              = $KioskId.ToLower()
-    serverUrl            = $ServerUrl.TrimEnd("/")
-    syncIntervalSec      = 300
-    idleTimeoutSec       = 600
-    heartbeatIntervalSec = 30
-    healthPort           = $HealthPort
-    uiPort               = $UiPort
-    appVersion           = $AppVersion
+  if ($ConfigJson -and $ConfigJson.Trim().Length -gt 2) {
+    $cfg = $ConfigJson.Trim()
+  } else {
+    $cfgObj = [ordered]@{
+      hostname             = $Hostname.ToLower()
+      kioskId              = $KioskId.ToLower()
+      serverUrl            = $ServerUrl.TrimEnd("/")
+      syncIntervalSec      = 300
+      idleTimeoutSec       = 600
+      heartbeatIntervalSec = 30
+      healthPort           = $HealthPort
+      uiPort               = $UiPort
+      appVersion           = $AppVersion
+      kioskType            = "exhibit"
+    }
+    $cfg = $cfgObj | ConvertTo-Json
   }
-  $cfg = $cfgObj | ConvertTo-Json
   Invoke-Command -Session $session -ScriptBlock {
     param($root, $json)
     $utf8 = New-Object System.Text.UTF8Encoding $false
